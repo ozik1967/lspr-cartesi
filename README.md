@@ -131,7 +131,9 @@ Dockerfile  ← RISC-V build for Cartesi Machine
 
 ## Contact
 
-Interested in integration or grants?  
+We are looking for integration partners
+and grant opportunities.
+
 → Open an issue on GitHub
 
 *Full source available in this repository*
