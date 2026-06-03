@@ -1,172 +1,137 @@
-# LSPR EMA Cross Backtest — Cartesi dApp
+# Universal Trading Strategy Backtesting
+### Powered by Cartesi | Verifiable On-Chain Results
 
-Verifiable on-chain backtesting of an EMA 9/26 crossover strategy on Binance Futures.
+> Any technical indicator. Any exchange.  
+> Any strategy. Results verified on Ethereum.
 
-Built on [Cartesi](https://cartesi.io) — results are reproducible and verifiable by any node.
+## Live Deployment
 
----
+| | |
+|---|---|
+| **Network** | Ethereum Sepolia (testnet) |
+| **Contract** | `0x704cA61F80eD64C466714b709bf3ABC579b14a75` |
+| **Strategy** | EMA 9/26 Cross (LONG + SHORT) |
+| **Status** | ✅ Live |
 
-## Strategy
+## What is this?
 
-**EMA 9/26 Cross** on any Binance Futures perpetual:
+A backtesting engine for trading strategies deployed as a Cartesi dApp.
 
-- **Golden cross** (EMA9 > EMA26) → LONG
-- **Death cross** (EMA9 < EMA26) → SHORT
-- Exits: Take Profit / Stop Loss / Liquidation / Opposite cross
+Results are computed inside a Linux VM and verified on Ethereum —
+nobody can fake or manipulate them.
 
-Metrics returned: trades, win rate, net P&L, max drawdown, TP/SL/liq counts.
+Think: Bloomberg Terminal for AI agents, but trustless and on-chain.
 
----
+## How it works
 
-## Prerequisites
+```
+User sends params
+        ↓
+Ethereum Sepolia (InputBox contract)
+        ↓
+Cartesi Node (VPS)
+        ↓
+Linux VM (Python) runs EMA backtest
+        ↓
+Result → on-chain Notice (verifiable by anyone)
+```
 
-- [Node.js](https://nodejs.org) 18+
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with RISC-V emulation
-- [Cartesi CLI](https://docs.cartesi.io/cartesi-rollups/1.5/development/installation/) v1.5+
-- Python 3.10+ (for client.py)
+## Current Strategy: EMA 9/26 Cross
 
+Entry signals:
+```
+→ Golden Cross (EMA9 crosses EMA26 upward)   = LONG
+→ Death Cross  (EMA9 crosses EMA26 downward) = SHORT
+```
+
+Parameters:
+```
+→ Symbol:    any Binance Futures pair
+→ Interval:  1h, 4h, 1d
+→ Days:      1-30 (limited by tx size)
+→ Leverage:  configurable
+→ SL / TP:   configurable
+```
+
+## Run it yourself
+
+Install dependencies:
 ```bash
-npm install -g @cartesi/cli
+pip install requests eth-account
 ```
 
----
-
-## Run locally
-
-### 1. Build the Cartesi machine
-
+Send a backtest request:
 ```bash
-cd lspr-cartesi
-cartesi build
+python client.py \
+  --symbol BTCUSDT \
+  --interval 1h \
+  --days 7 \
+  --leverage 10 \
+  --sl-pct 0.01 \
+  --tp-pct 0.02 \
+  --prefetch
 ```
 
-Compiles a RISC-V Docker image. Takes 5–15 min on first run.
-
-### 2. Start the local node
-
-```bash
-cartesi run
-```
-
-Starts a local Ethereum devnet + Cartesi node. Keep this terminal open.
-
-### 3. Send a backtest request
-
-**Option A — Cartesi CLI (interactive):**
-```bash
-cartesi send
-```
-Choose "Send generic input", paste JSON:
-```json
-{"symbol":"BTCUSDT","interval":"1h","days":30,"leverage":50,"margin":100}
-```
-
-**Option B — Python client:**
-```bash
-# Demo mode (dApp fetches klines internally)
-python client.py --symbol BTCUSDT --interval 1h --days 30 --leverage 50
-
-# Deterministic mode (klines embedded in payload, fully verifiable)
-python client.py --symbol BTCUSDT --prefetch
-
-# Dry run (print hex payload only)
-python client.py --dry-run
-```
-
-### 4. Read the result
-
-```bash
-# GraphQL explorer
-open http://localhost:8080/graphql
-```
-
-Query notices:
-```graphql
-{ notices { edges { node { payload } } } }
-```
-
----
-
-## Input schema
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `symbol` | string | `BTCUSDT` | Binance Futures symbol |
-| `interval` | string | `1h` | Candle interval: `1m` `5m` `15m` `1h` `4h` `1d` |
-| `days` | int | `30` | Historical lookback window |
-| `leverage` | int | `50` | Leverage multiplier (1–125) |
-| `margin` | float | `100.0` | Margin per trade in USDT |
-| `sl_pct` | float | `0.002` | Stop loss fraction (0.2%) |
-| `tp_pct` | float | `0.005` | Take profit fraction (0.5%) |
-| `klines` | array | `null` | Pre-fetched klines (deterministic mode) |
-
----
-
-## Output (Notice payload — hex-decoded JSON)
-
+Example response (on-chain Notice):
 ```json
 {
-  "symbol": "BTCUSDT",
-  "interval": "1h",
-  "leverage": 50,
-  "margin": 100.0,
-  "candles": 720,
-  "strategy": "EMA 9/26 Cross",
-  "trades": 14,
-  "wins": 9,
-  "tps": 5,
-  "sls": 4,
-  "liqs": 0,
-  "wr_pct": 64.3,
-  "net_pnl": 187.50,
-  "max_dd_pct": 12.4
+  "symbol":     "BTCUSDT",
+  "strategy":   "EMA 9/26 Cross",
+  "trades":     12,
+  "wr_pct":     58.3,
+  "net_pnl":    145.32,
+  "max_dd_pct": 8.1,
+  "candles":    168
 }
 ```
-
----
-
-## Deploy to testnet (Base Sepolia)
-
-1. Get test ETH: [faucet.base.org](https://faucet.base.org)
-2. Create `.env`:
-```env
-MNEMONIC="your twelve word mnemonic phrase here ..."
-```
-3. Deploy:
-```bash
-cartesi deploy --network base-sepolia
-```
-
-This deploys the Cartesi contracts and registers your machine hash on-chain.
-
----
 
 ## Architecture
 
 ```
-[client.py]
-    │  hex-encoded JSON params
-    ▼
-[Cartesi InputBox — on-chain]
-    │
-    ▼
-[Cartesi Node — RISC-V VM]
-    │  dapp.py: fetch klines → run EMA backtest
-    ▼
-[Notice: JSON result — on-chain, verifiable]
+client.py   ← fetches klines off-chain, builds hex payload, sends tx
+dapp.py     ← Python backtest logic running inside Cartesi RISC-V VM
+Dockerfile  ← RISC-V build for Cartesi Machine
 ```
 
-The backtest runs inside a deterministic RISC-V VM. Any Cartesi node can replay the computation and verify the result.
+## Roadmap
 
----
+- [x] EMA 9/26 Cross backtest
+- [x] Deployed on Ethereum Sepolia
+- [x] Verifiable on-chain results
+- [ ] RSI signal
+- [ ] MACD signal
+- [ ] Funding Rate signal
+- [ ] MA Cross (any periods)
+- [ ] Multi-exchange (Hyperliquid)
+- [ ] x402 pay-per-use monetization
+- [ ] Mainnet deployment
 
-## Project structure
+## Why Cartesi?
 
+**Traditional backtesting:**
 ```
-lspr-cartesi/
-├── dapp.py          # Cartesi dApp: EMA backtest + rollup protocol handler
-├── client.py        # Off-chain helper: build payload + send to node
-├── Dockerfile       # RISC-V build (cartesi/python:3.10-slim-jammy base)
-├── requirements.txt # requests==2.31.0
-└── README.md
+→ Results on centralized server
+→ Anyone can manipulate them
+→ "Trust me bro"
 ```
+
+**Cartesi backtesting:**
+```
+→ Results computed in Linux VM
+→ Verified by Ethereum
+→ Mathematically trustless
+```
+
+## Tech Stack
+
+- Python 3.10
+- Cartesi Rollups v1.5
+- Ethereum Sepolia
+- Binance Futures API
+
+## Contact
+
+Interested in integration or grants?  
+→ Open an issue on GitHub
+
+*Full source available in this repository*
