@@ -124,8 +124,8 @@ Dockerfile  ← RISC-V build for Cartesi Machine
 
 ## Tech Stack
 
-- Python 3.10
-- Cartesi Rollups v1.5
+- Python 3.12
+- Cartesi Rollups v2.0
 - Ethereum Sepolia
 - Binance Futures API
 
