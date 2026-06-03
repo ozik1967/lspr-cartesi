@@ -10,8 +10,6 @@ from os import environ
 import logging
 import json
 import requests
-import time
-from datetime import datetime, timedelta
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -19,7 +17,6 @@ logger = logging.getLogger(__name__)
 rollup_server = environ["ROLLUP_HTTP_SERVER_URL"]
 logger.info(f"Rollup server: {rollup_server}")
 
-BINANCE_API = "https://fapi.binance.com"
 FEE_RATE = 0.0004   # 0.04% taker per side
 
 
@@ -30,27 +27,6 @@ def hex2str(h: str) -> str:
 
 def str2hex(s: str) -> str:
     return "0x" + s.encode("utf-8").hex()
-
-
-# ── Binance data fetch ────────────────────────────────────────────────────────
-
-def fetch_klines(symbol: str, interval: str, days: int) -> list:
-    end_ms   = int(time.time() * 1000)
-    start_ms = int((datetime.utcnow() - timedelta(days=days)).timestamp() * 1000)
-    all_k = []
-    while start_ms < end_ms:
-        url = (f"{BINANCE_API}/fapi/v1/klines?symbol={symbol}&interval={interval}"
-               f"&startTime={start_ms}&limit=1500")
-        r = requests.get(url, timeout=20)
-        r.raise_for_status()
-        data = r.json()
-        if not data:
-            break
-        all_k.extend(data)
-        start_ms = data[-1][0] + 1
-        if len(data) < 1500:
-            break
-    return all_k
 
 
 # ── EMA cross backtest ────────────────────────────────────────────────────────
@@ -197,14 +173,14 @@ def handle_advance(data: dict) -> str:
         sl_pct   = float(payload.get("sl_pct", 0.002))
         tp_pct   = float(payload.get("tp_pct", 0.005))
 
-        # Accept pre-fetched klines (deterministic) or fetch live (demo mode)
+        # klines must be provided in the payload (Cartesi VM has no network access)
         klines = payload.get("klines")
-        if klines:
-            logger.info(f"Using {len(klines)} provided klines")
-        else:
-            logger.info(f"Fetching {symbol} {interval} {days}d from Binance...")
-            klines = fetch_klines(symbol, interval, days)
-            logger.info(f"Fetched {len(klines)} candles")
+        if not klines:
+            raise ValueError(
+                "Missing 'klines' in payload. "
+                "Fetch klines off-chain with client.py --prefetch and embed them."
+            )
+        logger.info(f"Using {len(klines)} provided klines")
 
         result = run_backtest(klines, leverage, margin, sl_pct, tp_pct)
         result.update({
